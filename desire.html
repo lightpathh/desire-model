@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>欲の持続評価モデル</title>
+  <meta name="theme-color" content="#7dd3fc">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e6eef8;
+      margin: 0;
+      padding: 16px;
+    }
+    h1 { text-align: center; color: #7dd3fc; }
+    section {
+      background: rgba(255,255,255,0.05);
+      padding: 16px;
+      border-radius: 12px;
+      max-width: 600px;
+      margin: 16px auto;
+    }
+    label { display: block; margin-top: 8px; }
+    input {
+      width: 100%;
+      padding: 8px;
+      border: none;
+      border-radius: 8px;
+      margin-top: 4px;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      font-size: 1rem;
+    }
+    button {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      background: #7dd3fc;
+      color: #042029;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .result {
+      background: rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 8px;
+      margin-top: 12px;
+    }
+    .history {
+      max-height: 200px;
+      overflow-y: auto;
+      background: rgba(255,255,255,0.05);
+      padding: 8px;
+      border-radius: 8px;
+    }
+    .small { font-size: 0.9rem; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>欲の持続評価モデル</h1>
+  <section>
+    <div class="small">計算式: D = I × √T　／　E' = D / (k√C)</div>
+
+    <label>I（欲の強度 1〜100）</label>
+    <input id="I" type="number" min="1" max="100" step="0.1" value="40">
+
+    <label>T（日数 1〜10000）</label>
+    <input id="T" type="number" min="1" max="10000" step="1" value="365">
+
+    <label>C（費用 円）</label>
+    <input id="C" type="number" min="1" step="1" value="10000">
+
+    <label>k（スケール定数）</label>
+    <input id="k" type="number" min="0.001" step="0.0001" value="1.4142">
+
+    <label>衝動時の妥当金額 C₀（円）<br><span class="small">k = 100 / √C₀ で自動算出</span></label>
+    <input id="C0" type="number" min="1" step="1">
+
+    <button id="calc">計算</button>
+    <button id="calcK" style="background:#38bdf8;">kを算出</button>
+    <button id="save">履歴保存</button>
+
+    <div class="result">
+      <div>D（欲の総量）: <span id="Dout">-</span></div>
+      <div>E'（主観的費用対効果）: <span id="Eout">-</span></div>
+      <div>推奨判断: <span id="judge">-</span></div>
+    </div>
+
+    <hr>
+    <h3>履歴</h3>
+    <div class="history" id="history"></div>
+    <button id="clear" style="background:#ef4444;">履歴全削除</button>
+    <button id="csv" style="background:#10b981;">CSV出力</button>
+  </section>
+
+  <script>
+  const $ = id => document.getElementById(id);
+  const key = "desire_history_v1";
+
+  function calc() {
+    const I = parseFloat($("I").value);
+    const T = parseFloat($("T").value);
+    const C = parseFloat($("C").value);
+    const k = parseFloat($("k").value);
+
+    if ([I,T,C,k].some(v=>!v || v<=0)) return alert("全ての値を正しく入力してください。");
+
+    const D = I * Math.sqrt(T);
+    const E = D / (k * Math.sqrt(C));
+
+    $("Dout").textContent = D.toFixed(4);
+    $("Eout").textContent = E.toFixed(4);
+
+    let j = "";
+    if (E >= 3) j = "強く買い推奨 (E' ≥ 3)";
+    else if (E > 1) j = "条件付きで良い (1 < E' < 3)";
+    else if (E >= 0.7) j = "保留 (0.7 ≤ E' ≤ 1)";
+    else j = "費用過剰 (E' < 0.7)";
+    $("judge").textContent = j;
+  }
+
+  $("calc").onclick = calc;
+
+  $("calcK").onclick = () => {
+    const C0 = parseFloat($("C0").value);
+    if (!C0 || C0 <= 0) return alert("C₀を正しく入力してください。");
+    const k = 100 / Math.sqrt(C0);
+    $("k").value = k.toFixed(4);
+    alert(`kを算出しました: ${k.toFixed(4)}`);
+  };
+
+  function save() {
+    const I = $("I").value, T = $("T").value, C = $("C").value, k = $("k").value;
+    const D = $("Dout").textContent, E = $("Eout").textContent;
+    if (D === "-" || E === "-") return alert("計算を先に行ってください。");
+
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    data.unshift({id: Date.now(), I, T, C, k, D, E});
+    localStorage.setItem(key, JSON.stringify(data.slice(0,50)));
+    renderHistory();
+  }
+
+  $("save").onclick = save;
+
+  function renderHistory() {
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    $("history").innerHTML = data.map(d =>
+      `<div style="border-bottom:1px solid rgba(255,255,255,0.1);padding:4px;">
+        <div class='small'>I=${d.I}, T=${d.T}, C=${d.C}, k=${d.k}</div>
+        <div>D=${d.D}, E'=${d.E}</div>
+        <button onclick="loadHist(${d.id})">読み込む</button>
+        <button onclick="delHist(${d.id})" style="background:#ef4444;">削除</button>
+      </div>`
+    ).join("") || "<div class='small'>履歴なし</div>";
+  }
+
+  window.loadHist = id => {
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    const item = data.find(x=>x.id===id);
+    if (!item) return;
+    $("I").value=item.I; $("T").value=item.T; $("C").value=item.C; $("k").value=item.k;
+    calc();
+  };
+
+  window.delHist = id => {
+    const data = JSON.parse(localStorage.getItem(key) || "[]").filter(x=>x.id!==id);
+    localStorage.setItem(key, JSON.stringify(data));
+    renderHistory();
+  };
+
+  $("clear").onclick = () => {
+    if (confirm("履歴を全削除しますか？")) {
+      localStorage.removeItem(key);
+      renderHistory();
+    }
+  };
+
+  $("csv").onclick = () => {
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    if (!data.length) return alert("履歴がありません。");
+    const rows = [["I","T","C","k","D","E'"]];
+    data.forEach(d=>rows.push([d.I,d.T,d.C,d.k,d.D,d.E]));
+    const csv = rows.map(r=>r.join(",")).join("\n");
+    const blob = new Blob([csv],{type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="desire_history.csv";a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  renderHistory();
+
+  // --- PWA 登録 ---
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").then(r=>{
+        console.log("SW registered:", r.scope);
+      }).catch(console.error);
+    });
+  }
+  </script>
+</body>
+</html>
