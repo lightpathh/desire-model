@@ -1,0 +1,24 @@
+{
+  "name": "Desire Model",
+  "short_name": "Desire",
+  "description": "欲の持続評価モデル — 計算ツール",
+  "lang": "ja-JP",
+  "start_url": "./desire.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#7dd3fc",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
