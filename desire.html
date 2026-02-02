@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>欲の持続評価モデル</title>
+
+<!-- PWA manifest -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#7dd3fc">
+
+<style>
+  :root{
+    --bg:#071226;
+    --card:#07192a;
+    --text:#e6eef8;
+    --muted:#98b0c0;
+    --accent:#7dd3fc;
+    --good:#16a34a;
+    --warn:#f59e0b;
+    --bad:#ef4444;
+    --pill: rgba(255,255,255,0.02);
+  }
+  html,body{height:100%;margin:0}
+  body{
+    background: linear-gradient(180deg,var(--bg) 0%, #04111a 100%);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    padding:18px;
+    box-sizing:border-box;
+  }
+  .wrap{max-width:640px;margin:0 auto}
+  header{margin-bottom:12px}
+  h1{font-size:1.4rem;margin:0 0 6px}
+  .formula{font-size:0.9rem;color:var(--muted)}
+
+  main{display:flex;flex-direction:column;gap:12px}
+
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.03);
+    padding:14px;border-radius:12px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.5);
+  }
+  label{display:block;color:var(--muted);font-size:0.92rem;margin-bottom:8px}
+  input[type="number"], textarea {
+    width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);
+    background:rgba(255,255,255,0.02);color:var(--text);font-size:1rem;box-sizing:border-box;
+  }
+  textarea{min-height:56px;resize:vertical}
+
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  button{
+    border:0;padding:10px 12px;border-radius:10px;font-weight:700;cursor:pointer;
+  }
+  .btn-primary{background:var(--accent);color:#042029}
+  .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--text)}
+  .btn-small{padding:8px 10px;border-radius:8px;font-weight:700}
+  .btn-danger{background:var(--bad);color:white;padding:8px 10px;border-radius:8px;border:0}
+
+  .result{display:flex;flex-direction:column;gap:8px}
+  .result-row{background:var(--pill);padding:12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;font-weight:700}
+  .result-label{color:var(--muted);font-weight:600}
+  .result-value{font-weight:900}
+
+  .judge{padding:12px;border-radius:10px;text-align:center;font-weight:900}
+
+  .history-list{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow:auto;margin-top:8px}
+  .hist-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02)}
+  .hist-top{display:flex;justify-content:space-between;align-items:center}
+  .hist-meta{font-size:0.86rem;color:var(--muted)}
+  .hist-memo{font-weight:900;margin-top:8px}
+  .hist-values{font-size:0.9rem;color:var(--muted);margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
+  .hist-actions{display:flex;gap:8px;margin-top:8px}
+
+  .small{font-size:0.86rem;color:var(--muted)}
+  footer{margin-top:18px;font-size:0.82rem;color:var(--muted);text-align:center;padding-bottom:26px}
+
+  @media (max-width:480px){
+    body{padding:12px}
+    h1{font-size:1.2rem}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>欲の持続評価モデル</h1>
+      <div class="formula">D = I × T<sup>a</sup> &nbsp;&nbsp; E' = D / (k × √C)</div>
+    </header>
+
+    <main>
+      <section class="card" aria-labelledby="inputs">
+        <div>
+          <label>I（Intensity）: 欲の強度（1〜100）</label>
+          <input id="I" type="number" inputmode="decimal" min="0" max="100" step="0.1" placeholder="例: 40" />
+
+          <div style="height:10px"></div>
+
+          <label>T（Time, 日）: 持続日数</label>
+          <input id="T" type="number" inputmode="numeric" min="1" max="10000" step="1" placeholder="例: 365" />
+
+          <div style="height:10px"></div>
+
+          <label>C（Cost, 円）: 費用</label>
+          <input id="C" type="number" inputmode="numeric" min="0" step="1" placeholder="例: 10000" />
+
+          <div style="height:10px"></div>
+
+          <label>k（スケール定数）</label>
+          <input id="k" type="number" inputmode="decimal" min="0.0001" step="0.0001" placeholder="空欄でも可（C₀で自動算出）" />
+
+          <div style="height:10px"></div>
+
+          <label>衝動キャリブレーション C₀（円）: 衝動なら出して良い金額（これを入れて「C₀→k」ボタンで k 自動入力）</label>
+          <input id="C0" type="number" inputmode="numeric" min="1" step="1" placeholder="例: 5000" />
+
+          <div style="height:12px"></div>
+
+          <div class="controls">
+            <button id="calcBtn" class="btn-primary">計算する</button>
+            <button id="calibrateBtn" class="btn-ghost btn-small">C₀ → k を算出</button>
+            <button id="saveBtn" class="btn-ghost btn-small">履歴に保存</button>
+            <button id="csvBtn" class="btn-ghost btn-small">CSV 出力</button>
+            <button id="installBtn" class="btn-ghost btn-small" style="display:none">インストール</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="results">
+        <div class="result">
+          <div class="result-row"><div class="result-label">D（欲の総量）</div><div id="Dout" class="result-value">—</div></div>
+          <div class="result-row"><div class="result-label">E'（主観的費用対効果）</div><div id="Eout" class="result-value">—</div></div>
+          <div id="judge" class="judge" style="background:var(--pill);color:var(--muted)">判定: <span id="judgement">—</span></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="history">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <label class="small">履歴</label>
+          </div>
+          <div>
+            <button id="clearBtn" class="btn-ghost btn-small">全件削除</button>
+          </div>
+        </div>
+
+        <div class="history-list" id="historyList" aria-live="polite"></div>
+      </section>
+
+    </main>
+
+    <footer>ダークモード · PWA 対応</footer>
+  </div>
+
+<script>
+/* --- helpers --- */
+const STORAGE_KEY = 'desire_model_history_v1';
+const DEFAULT_A = 0.5;
+
+const Iel = document.getElementById('I');
+const Tel = document.getElementById('T');
+const Cel = document.getElementById('C');
+const kel = document.getElementById('k');
+const C0el = document.getElementById('C0');
+
+const calcBtn = document.getElementById('calcBtn');
+const calibrateBtn = document.getElementById('calibrateBtn');
+const saveBtn = document.getElementById('saveBtn');
+const csvBtn = document.getElementById('csvBtn');
+const installBtn = document.getElementById('installBtn');
+const clearBtn = document.getElementById('clearBtn');
+
+const Dout = document.getElementById('Dout');
+const Eout = document.getElementById('Eout');
+const judgementEl = document.getElementById('judgement');
+const judgeBox = document.getElementById('judge');
+
+const historyList = document.getElementById('historyList');
+
+function toNum(v){ const n = Number(v); return Number.isFinite(n) ? n : NaN; }
+function round(v, dp=6){ const m = Math.pow(10,dp); return Math.round((v||0)*m)/m; }
+function nowIso(){ return new Date().toISOString(); }
+
+/* --- calculation --- */
+function compute(I,T,C,k,a=DEFAULT_A){
+  if (!(I>0 && T>0 && C>0 && k>0 && a>0)) return {error:'入力値が不正です'};
+  const Tpow = Math.pow(T, a);
+  const D = I * Tpow;
+  const sqrtC = Math.sqrt(C);
+  const denom = k * sqrtC;
+  const E = D / denom;
+  return {D: round(D,6), E: round(E,6), rawE: E};
+}
+
+function judgmentFromE(E){
+  if (!Number.isFinite(E)) return {label:'—', color:'var(--muted)'};
+  if (E >= 3) return {label:'強く推奨', color:'var(--good)'};
+  if (E > 1) return {label:'良い', color:'var(--good)'};
+  if (E >= 0.7) return {label:'保留', color:'var(--warn)'};
+  return {label:'費用過剰', color:'var(--bad)'};
+}
+
+/* --- UI update --- */
+let lastResult = null;
+function updateResults(res){
+  if (!res || res.error){
+    Dout.textContent = '—';
+    Eout.textContent = '—';
+    judgementEl.textContent = res && res.error ? res.error : '—';
+    judgeBox.style.color = 'var(--muted)';
+    lastResult = null;
+    return;
+  }
+  Dout.textContent = res.D;
+  Eout.textContent = res.E;
+  const j = judgmentFromE(res.rawE);
+  judgementEl.textContent = j.label;
+  judgeBox.style.color = j.color;
+  lastResult = res;
+}
+
+/* --- events --- */
+calcBtn.addEventListener('click', ()=>{
+  const I = toNum(Iel.value);
+  const T = toNum(Tel.value);
+  const C = toNum(Cel.value);
+  const k = toNum(kel.value);
+  if (!k || !Number.isFinite(k)) { alert('k を入力するか、C₀→k で自動算出してください。'); return; }
+  const res = compute(I,T,C,k);
+  updateResults(res);
+});
+
+calibrateBtn.addEventListener('click', ()=>{
+  const C0 = toNum(C0el.value);
+  if (!C0 || C0 <= 0) { alert('C₀ に有効な金額を入力してください（例: 5000）。'); return; }
+  const k = 100 / Math.sqrt(C0);
+  kel.value = round(k,6);
+  alert('k を算出しました: ' + round(k,6));
+});
+
+/* --- history --- */
+function loadHistory(){
+  try{
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (!s) return [];
+    const arr = JSON.parse(s);
+    if (!Array.isArray(arr)) return [];
+    return arr;
+  }catch(e){ return []; }
+}
+
+function saveHistory(arr){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+function renderHistory(){
+  const arr = loadHistory();
+  historyList.innerHTML = '';
+  if (!arr || arr.length === 0){
+    const p = document.createElement('div'); p.className='small'; p.textContent='履歴がありません。';
+    historyList.appendChild(p);
+    return;
+  }
+  arr.forEach(item=>{
+    const el = document.createElement('div'); el.className='hist-item';
+    const top = document.createElement('div'); top.className='hist-top';
+    const meta = document.createElement('div'); meta.className='hist-meta';
+    meta.textContent = (new Date(item.ts)).toLocaleString();
+    const actions = document.createElement('div');
+
+    const loadBtn = document.createElement('button'); loadBtn.className='btn-ghost btn-small'; loadBtn.textContent='読み込み';
+    loadBtn.addEventListener('click', ()=>{
+      Iel.value = item.I; Tel.value = item.T; Cel.value = item.C; kel.value = item.k;
+      const res = compute(item.I, item.T, item.C, item.k);
+      if (res && res.error){ alert('読み込みデータが不正です'); return; }
+      updateResults(res);
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+
+    const delBtn = document.createElement('button'); delBtn.className='btn-danger'; delBtn.textContent='削除';
+    delBtn.addEventListener('click', ()=>{
+      if (!confirm('この履歴を削除しますか？')) return;
+      deleteHistory(item.id);
+    });
+
+    actions.appendChild(loadBtn);
+    actions.appendChild(delBtn);
+
+    top.appendChild(meta);
+    top.appendChild(actions);
+
+    const memo = document.createElement('div'); memo.className='hist-memo'; memo.textContent = item.memo;
+    const vals = document.createElement('div'); vals.className='hist-values';
+    vals.textContent = `I=${item.I}  T=${item.T}日  C=${item.C}円  D=${item.D}  E'=${item.E}`;
+
+    el.appendChild(top);
+    el.appendChild(memo);
+    el.appendChild(vals);
+
+    historyList.appendChild(el);
+  });
+}
+
+function addHistory(entry){
+  const arr = loadHistory();
+  arr.unshift(entry);
+  while (arr.length > 200) arr.pop();
+  saveHistory(arr);
+  renderHistory();
+}
+
+function deleteHistory(id){
+  let arr = loadHistory();
+  arr = arr.filter(x=>x.id !== id);
+  saveHistory(arr);
+  renderHistory();
+}
+
+saveBtn.addEventListener('click', ()=>{
+  if (!lastResult){ alert('先に「計算する」を押して結果を出してください。'); return; }
+  const memo = prompt('メモを入力してください（例: 欲しい物）', '');
+  if (memo === null) return;
+  if (memo.trim() === ''){ alert('メモは空にできません。例: 欲しい物'); return; }
+  const entry = {
+    id: 'h' + Date.now(),
+    ts: nowIso(),
+    I: toNum(Iel.value),
+    T: toNum(Tel.value),
+    C: toNum(Cel.value),
+    k: toNum(kel.value),
+    a: DEFAULT_A,
+    D: lastResult.D,
+    E: lastResult.E,
+    memo: memo.trim()
+  };
+  addHistory(entry);
+  alert('履歴に保存しました。');
+});
+
+clearBtn.addEventListener('click', ()=>{
+  if (!confirm('履歴をすべて削除しますか？')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  renderHistory();
+});
+
+/* CSV export */
+csvBtn.addEventListener('click', ()=>{
+  const arr = loadHistory();
+  if (!arr || arr.length === 0){ alert('エクスポートする履歴がありません。'); return; }
+  const rows = [['ts','I','T','C','k','a','D','E','memo']];
+  arr.forEach(e => rows.push([e.ts,e.I,e.T,e.C,e.k,e.a,e.D,e.E,e.memo]));
+  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'desire_model_history.csv'; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+/* init */
+(function(){
+  renderHistory();
+})();
+
+/* --- Service Worker registration (PWA) --- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    // register sw in same directory (./sw.js)
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => {
+        console.log('ServiceWorker registered, scope:', reg.scope);
+      })
+      .catch(err => {
+        console.warn('ServiceWorker registration failed:', err);
+      });
+  });
+}
+
+/* --- beforeinstallprompt handling for install button --- */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = 'inline-block';
+});
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const choice = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  installBtn.style.display = 'none';
+});
+
+/* --- Hide install button if app already installed --- */
+window.addEventListener('appinstalled', () => {
+  installBtn.style.display = 'none';
+});
+</script>
+</body>
+</html>
