@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>欲の持続評価モデル</title>
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0fb8d4" />
+<style>
+  /* Mobile-first, dark mode, simple layout */
+  :root{
+    --bg:#071226; --card:#0b1220; --muted:#94a3b8; --text:#e6eef8;
+    --accent:#7dd3fc; --good:#2dd4bf; --warn:#f59e0b; --bad:#fb7185;
+    --glass: rgba(255,255,255,0.03);
+    --radius:12px;
+    font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Meiryo", "Segoe UI", Roboto, Arial;
+  }
+  html,body{height:100%}
+  body{
+    margin:0;
+    background: linear-gradient(180deg,#041022 0%, #071226 100%);
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    padding:18px;
+    box-sizing:border-box;
+  }
+
+  .wrap{max-width:720px;margin:0 auto;}
+  header{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  h1{font-size:1.4rem;margin:0}
+  .sub{font-size:0.9rem;color:var(--muted);line-height:1.2}
+  .card{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 18px rgba(2,6,23,0.5)}
+  label{display:block;font-size:0.85rem;color:var(--muted);margin-bottom:6px}
+  input[type="number"], textarea {
+    width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px;
+    border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text);
+    font-size:1rem;
+  }
+  input:focus, textarea:focus{outline:none; box-shadow:0 0 0 3px rgba(125,211,252,0.09); border-color:var(--accent)}
+  .vstack{display:flex;flex-direction:column;gap:10px}
+  .row{display:flex;gap:8px;align-items:center}
+  button{background:var(--accent);color:#042029;border:none;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:700;font-size:0.95rem}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--text);font-weight:600}
+  button.danger{background:var(--bad);color:#2b0217}
+  .results{display:flex;flex-direction:column;gap:8px}
+  .result-line{background:var(--glass);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.02);font-size:1rem;display:flex;align-items:center;justify-content:space-between}
+  .result-label{color:var(--muted);font-size:0.85rem}
+  .result-value{font-weight:700}
+  .judgement{padding:8px 10px;border-radius:8px;color:#021214;font-weight:700;text-align:center}
+  .judgement.good{background:var(--good);color:#01201b}
+  .judgement.ok{background:var(--accent);color:#022029}
+  .judgement.warn{background:var(--warn);color:#2a1600}
+  .judgement.bad{background:var(--bad);color:#420012}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .meta{font-size:0.85rem;color:var(--muted)}
+  .history-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto;padding-top:6px}
+  .history-item{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
+  .history-main{display:flex;flex-direction:column;gap:4px}
+  .memo{font-weight:800} /* memo is bold as requested */
+  .smallbtn{padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);font-weight:600}
+  footer{margin-top:18px;font-size:0.8rem;color:var(--muted);text-align:center}
+  @media (min-width:520px){ body{padding:28px} h1{font-size:1.6rem} .card{padding:18px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>欲の持続評価モデル</h1>
+    <div class="sub">
+      <div>D = I × √T</div>
+      <div>E' = D / (k × √C)</div>
+    </div>
+  </header>
+
+  <!-- 入力 -->
+  <section class="card vstack" aria-labelledby="inputs">
+    <div>
+      <label for="I">I（Intensity：欲の強度 1〜100）</label>
+      <input id="I" type="number" inputmode="decimal" min="0" max="100" step="0.1" placeholder="例: 40" />
+    </div>
+
+    <div>
+      <label for="T">T（Time：持続日数）</label>
+      <input id="T" type="number" inputmode="numeric" min="1" max="10000" step="1" placeholder="例: 365" />
+    </div>
+
+    <div>
+      <label for="C">C（Cost：費用 / 円）</label>
+      <input id="C" type="number" inputmode="numeric" min="0" step="1" placeholder="例: 10000" />
+    </div>
+
+    <div>
+      <label for="k">k（スケール定数）</label>
+      <input id="k" type="number" inputmode="decimal" min="0.0001" step="0.0001" placeholder="例: 1.4142" />
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <button id="calcBtn" aria-label="計算">計算</button>
+      <button id="saveBtn" class="ghost" aria-label="履歴に保存">履歴に保存</button>
+      <button id="exportBtn" class="ghost" aria-label="CSV出力">CSV 出力</button>
+    </div>
+
+    <div style="height:6px"></div>
+
+    <!-- キャリブレーション -->
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="C0" type="number" inputmode="numeric" min="1" step="1" placeholder="C₀（衝動時の妥当額）" style="flex:1" />
+      <button id="calibBtn" class="smallbtn" title="C₀ から k を計算">C₀ → k</button>
+    </div>
+
+    <div class="meta">※ 計算は「計算」ボタンを押したときのみ実行されます</div>
+  </section>
+
+  <!-- 結果 -->
+  <section class="card results" aria-live="polite" aria-atomic="true">
+    <div class="result-line">
+      <div class="result-label">D（欲の総量）</div>
+      <div class="result-value" id="Dval">—</div>
+    </div>
+    <div class="result-line">
+      <div class="result-label">E'（主観的費用対効果）</div>
+      <div class="result-value" id="Eval">—</div>
+    </div>
+    <div class="result-line">
+      <div class="result-label">判定</div>
+      <div id="Judge" class="judgement" role="status">—</div>
+    </div>
+  </section>
+
+  <!-- 履歴 -->
+  <section class="card vstack">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div style="font-weight:700">履歴</div>
+      <div class="row">
+        <button id="clearAll" class="smallbtn">全削除</button>
+      </div>
+    </div>
+
+    <div class="history-list" id="historyList" aria-live="polite"></div>
+
+  </section>
+
+  <footer>
+    （PWA 対応）manifest.json と sw.js を同じルートに配置してください
+  </footer>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // DOM
+  const Iel = document.getElementById('I');
+  const Tel = document.getElementById('T');
+  const Cel = document.getElementById('C');
+  const kel = document.getElementById('k');
+  const C0el = document.getElementById('C0');
+  const calcBtn = document.getElementById('calcBtn');
+  const calibBtn = document.getElementById('calibBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const Dval = document.getElementById('Dval');
+  const Eval = document.getElementById('Eval');
+  const Judge = document.getElementById('Judge');
+  const historyList = document.getElementById('historyList');
+  const clearAllBtn = document.getElementById('clearAll');
+
+  const STORAGE_KEY = 'desire_model_history_v2';
+
+  // helpers
+  const toNum = v => { const n = Number(v); return Number.isFinite(n) ? n : NaN; }
+  const round = (v, d=4) => { const m = Math.pow(10,d); return Math.round(v*m)/m; }
+
+  // judgment mapping
+  function judgeFromE(E){
+    if(!Number.isFinite(E)) return {text:'—', cls:'', color:''};
+    if(E >= 3) return {text:'強く推奨', cls:'good'};
+    if(E > 1) return {text:'良い', cls:'ok'};
+    if(E >= 0.7) return {text:'保留', cls:'warn'};
+    return {text:'費用過剰', cls:'bad'};
+  }
+
+  // compute: D = I * sqrt(T); E' = D / (k * sqrt(C))
+  function compute(I,T,C,k){
+    if(! (I>0 && T>0 && C>0 && k>0) ) return null;
+    const D = I * Math.sqrt(T);
+    const sqrtC = Math.sqrt(C);
+    const Eprime = D / (k * sqrtC);
+    return {D: D, E: Eprime};
+  }
+
+  // UI update
+  function showResult(res){
+    if(!res){
+      Dval.textContent = '—';
+      Eval.textContent = '—';
+      Judge.textContent = '—';
+      Judge.className = 'judgement';
+      return;
+    }
+    Dval.textContent = round(res.D,6);
+    Eval.textContent = round(res.E,6);
+    const j = judgeFromE(res.E);
+    Judge.textContent = j.text;
+    Judge.className = 'judgement ' + j.cls;
+  }
+
+  // history management
+  function loadHistory(){
+    try{
+      const s = localStorage.getItem(STORAGE_KEY);
+      if(!s) return [];
+      const arr = JSON.parse(s);
+      if(!Array.isArray(arr)) return [];
+      return arr;
+    }catch(e){ return []; }
+  }
+
+  function saveHistoryArray(arr){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+  }
+
+  function addHistory(entry){
+    const arr = loadHistory();
+    arr.unshift(entry);
+    while(arr.length > 200) arr.pop();
+    saveHistoryArray(arr);
+    renderHistory();
+  }
+
+  function deleteHistory(id){
+    const arr = loadHistory().filter(e => e.id !== id);
+    saveHistoryArray(arr);
+    renderHistory();
+  }
+
+  function renderHistory(){
+    const arr = loadHistory();
+    historyList.innerHTML = '';
+    if(arr.length === 0){
+      historyList.innerHTML = '<div class="meta" style="color:var(--muted)">履歴がありません</div>';
+      return;
+    }
+    arr.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'history-item';
+      const main = document.createElement('div');
+      main.className = 'history-main';
+      // memo bold
+      const memo = document.createElement('div');
+      memo.className = 'memo';
+      memo.textContent = item.memo || '(メモ無し)';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `I=${item.I} T=${item.T} C=${item.C} k=${item.k}  (${new Date(item.ts).toLocaleString()})`;
+      main.appendChild(memo);
+      main.appendChild(meta);
+
+      const controls = document.createElement('div');
+      controls.style.display = 'flex';
+      controls.style.flexDirection = 'column';
+      controls.style.gap = '6px';
+      controls.style.alignItems = 'flex-end';
+
+      const loadBtn = document.createElement('button');
+      loadBtn.className = 'smallbtn';
+      loadBtn.textContent = '読み込み';
+      loadBtn.onclick = ()=> {
+        Iel.value = item.I;
+        Tel.value = item.T;
+        Cel.value = item.C;
+        kel.value = item.k;
+        C0el.value = '';
+        // compute immediately to show result (but do not auto-save)
+        const res = compute(toNum(item.I), toNum(item.T), toNum(item.C), toNum(item.k));
+        showResult(res);
+        window.scrollTo({top:0,behavior:'smooth'});
+      };
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'danger';
+      delBtn.textContent = '削除';
+      delBtn.onclick = ()=> {
+        if(!confirm('この履歴を削除しますか？')) return;
+        deleteHistory(item.id);
+      };
+
+      controls.appendChild(loadBtn);
+      controls.appendChild(delBtn);
+
+      el.appendChild(main);
+      el.appendChild(controls);
+      historyList.appendChild(el);
+    });
+  }
+
+  // CSV export
+  function exportCSV(){
+    const arr = loadHistory();
+    if(arr.length === 0){ alert('履歴がありません'); return; }
+    const rows = [['ts','memo','I','T','C','k','D','E']];
+    arr.forEach(e => {
+      rows.push([e.ts, e.memo || '', e.I, e.T, e.C, e.k, e.D, e.E]);
+    });
+    const csv = rows.map(r => r.map(cell => '"' + String(cell).replace(/"/g,'""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'desire_history.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // events
+  calcBtn.addEventListener('click', ()=> {
+    const I = toNum(Iel.value);
+    const T = toNum(Tel.value);
+    const C = toNum(Cel.value);
+    const k = toNum(kel.value);
+    const res = compute(I,T,C,k);
+    showResult(res);
+  });
+
+  calibBtn.addEventListener('click', ()=> {
+    const C0 = toNum(C0el.value);
+    if(! (C0 > 0) ){ alert('C₀ に有効な数値を入力してください (例: 5000)'); return; }
+    const k = 100 / Math.sqrt(C0);
+    kel.value = round(k,6);
+    alert('k を設定しました: ' + round(k,6));
+  });
+
+  saveBtn.addEventListener('click', ()=> {
+    const I = toNum(Iel.value);
+    const T = toNum(Tel.value);
+    const C = toNum(Cel.value);
+    const k = toNum(kel.value);
+    const res = compute(I,T,C,k);
+    if(!res){ alert('入力値を確認してください（正の数であること）'); return; }
+    // ask for memo (small), keep minimal UI: use prompt
+    const memo = prompt('メモ（履歴に太字で保存されます）\n例: 欲しい物', '');
+    if(memo === null) return; // cancel
+    const entry = { id:'h'+Date.now(), ts:new Date().toISOString(), memo: memo.trim(), I, T, C, k, D: round(res.D,6), E: round(res.E,6) };
+    addHistory(entry);
+    alert('履歴に保存しました');
+  });
+
+  exportBtn.addEventListener('click', exportCSV);
+
+  clearAllBtn.addEventListener('click', ()=> {
+    if(!confirm('履歴をすべて削除しますか？')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    renderHistory();
+  });
+
+  // initial render
+  renderHistory();
+
+  // register service worker for PWA
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=> {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('ServiceWorker registered:', reg.scope);
+        })
+        .catch(err => {
+          console.info('ServiceWorker registration failed:', err);
+        });
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
