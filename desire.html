@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>欲の持続評価モデル</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#7dd3fc">
+
+<style>
+:root {
+  --bg: #071226;
+  --card: #07192a;
+  --text: #e6eef8;
+  --muted: #9fb4c7;
+  --accent: #7dd3fc;
+  --good: #38b000;
+  --warn: #ffb020;
+  --bad: #ef4444;
+  --pill-bg: rgba(255,255,255,0.02);
+}
+html, body {margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Yu Gothic UI",Meiryo,sans-serif;background:var(--bg);color:var(--text);}
+body {line-height:1.5;}
+.wrap {max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}
+h1{font-size:1.4rem;margin:0;}
+.formula{font-size:0.9rem;color:var(--muted);}
+.card{background:var(--card);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,0.5);}
+label{font-size:0.9rem;color:var(--muted);}
+input, select, textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:var(--text);font-size:1rem;box-sizing:border-box;}
+textarea{resize:vertical;min-height:56px;}
+button{border:0;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer;}
+.btn-primary{background:var(--accent);color:#042029;}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--text);}
+.btn-small{padding:8px 10px;font-weight:600;border-radius:8px;}
+.btn-danger{background:var(--bad);color:white;padding:8px;border-radius:8px;}
+.result-line{padding:10px;border-radius:8px;background:var(--pill-bg);display:flex;justify-content:space-between;font-weight:700;}
+.result-judge{padding:10px;border-radius:8px;background:var(--pill-bg);font-weight:700;}
+.history-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto;}
+.hist-item{display:flex;flex-direction:column;padding:10px;border-radius:8px;background:rgba(255,255,255,0.01);}
+.hist-top{display:flex;justify-content:space-between;align-items:center;}
+.hist-meta{font-size:0.85rem;color:var(--muted);}
+.hist-memo{font-weight:800;margin-top:6px;}
+.hist-actions{display:flex;gap:8px;margin-top:8px;}
+small-note{font-size:0.85rem;color:var(--muted);}
+footer{font-size:0.82rem;color:var(--muted);text-align:center;margin-top:16px;padding-bottom:16px;}
+.flex-row{display:flex;gap:8px;align-items:center;}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <header>
+    <h1>欲の持続評価モデル</h1>
+    <div class="formula">D = I × √T  E' = D / (k × √C)</div>
+  </header>
+
+  <!-- 入力カード -->
+  <section class="card">
+    <label>I（Intensity）: 欲の強度（1〜100）</label>
+    <input id="I" type="number" min="0" max="100" step="0.1" placeholder="例: 40">
+
+    <!-- ▼ 期間入力拡張 -->
+    <label>T: 欲の持続期間　日数に自動換算します</label>
+    <div class="flex-row">
+      <input id="T" type="number" min="1" step="1" placeholder="例: 365" style="flex:2;">
+      <select id="Tunit" style="flex:1;">
+        <option value="day">日</option>
+        <option value="week">週</option>
+        <option value="month">月</option>
+        <option value="year">年</option>
+      </select>
+    </div>
+
+    <label>C（費用, 円）</label>
+    <input id="C" type="number" min="0" step="1" placeholder="例: 10000">
+
+    <label>k（スケール定数）: 金銭感覚</label>
+    <input id="k" type="number" min="0.0001" step="0.0001" placeholder="必須（自動計算も可）">
+
+    <label>予期せぬ一目惚れ商品の支払い許容額C₀（円）: k自動計算</label>
+    <input id="C0" type="number" min="1" step="1" placeholder="例: 5000">
+
+    <!-- ▼ 新規: 月のお小遣い収入額からkを算出 -->
+    <label>月のお小遣い収入額（円）: k自動計算</label>
+    <input id="income" type="number" min="1" step="1" placeholder="例: 15000">
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button id="calcBtn" class="btn-primary">計算する</button>
+      <button id="calibrateBtn" class="btn-ghost btn-small">C₀ → k算出</button>
+      <button id="incomeBtn" class="btn-ghost btn-small">お小遣い → k算出</button>
+      <button id="saveBtn" class="btn-ghost btn-small">履歴保存</button>
+      <button id="exportBtn" class="btn-ghost btn-small">CSV出力</button>
+    </div>
+  </section>
+
+  <!-- 結果カード -->
+  <section class="card">
+    <div class="result-line">D（欲の総量） <span id="Dout">—</span></div>
+    <div class="result-line">E'（心理的コスパ） <span id="Eout">—</span></div>
+    <div class="result-judge">判定: <span id="judgement">—</span></div>
+  </section>
+
+  <!-- 履歴カード -->
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <small-note>履歴をタップで自動読み込み・削除は赤ボタン</small-note>
+      </div>
+      <button id="clearAllBtn" class="btn-ghost btn-small">全件削除</button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </section>
+
+  <footer>PWA対応・シンプル表示</footer>
+</div>
+
+<script>
+/* ----- 基本関数 ----- */
+const Iinput=document.getElementById('I');
+const Tinput=document.getElementById('T');
+const Tunit=document.getElementById('Tunit');
+const Cinput=document.getElementById('C');
+const kinput=document.getElementById('k');
+const C0input=document.getElementById('C0');
+const incomeInput=document.getElementById('income');
+const calcBtn=document.getElementById('calcBtn');
+const calibrateBtn=document.getElementById('calibrateBtn');
+const incomeBtn=document.getElementById('incomeBtn');
+const saveBtn=document.getElementById('saveBtn');
+const exportBtn=document.getElementById('exportBtn');
+const clearAllBtn=document.getElementById('clearAllBtn');
+const Dout=document.getElementById('Dout');
+const Eout=document.getElementById('Eout');
+const judgementEl=document.getElementById('judgement');
+const historyList=document.getElementById('historyList');
+
+const STORAGE_KEY='desire_model_history_v1';
+
+function toNum(v){const n=Number(v);return Number.isFinite(n)?n:NaN;}
+function r(v,dp=6){const m=Math.pow(10,dp);return Math.round(v*m)/m;}
+function nowIso(){return new Date().toISOString();}
+
+/* ----- 単位変換 ----- */
+function convertTtoDays(Tval,unit){
+  if(!Number.isFinite(Tval)) return NaN;
+  switch(unit){
+    case 'week': return Tval*7;
+    case 'month': return Tval*30;
+    case 'year': return Tval*365;
+    default: return Tval;
+  }
+}
+
+/* ----- 計算 ----- */
+let lastResult=null;
+function compute({I,T,C,k}) {
+  if (!(I>0 && T>0 && C>0 && k>0)) return {error:'I,T,C,kは正の数で入力してください'};
+  const D=I*Math.sqrt(T);
+  const E=D/(k*Math.sqrt(C));
+  return {D:r(D),E:r(E),D_raw:D,E_raw:E};
+}
+function judgment(E){
+  if(!Number.isFinite(E)) return {label:'計算不能',color:'var(--muted)'};
+  if(E>=3) return {label:'強く推奨',color:'var(--good)'};
+  if(E>1) return {label:'良い',color:'var(--good)'};
+  if(E>=0.7) return {label:'保留',color:'var(--warn)'};
+  return {label:'費用過剰',color:'var(--bad)'};
+}
+function updateResult(res){
+  if(res.error){Dout.textContent='—';Eout.textContent='—';judgementEl.textContent=res.error;return;}
+  Dout.textContent=res.D;Eout.textContent=res.E;
+  const j=judgment(res.E_raw);
+  judgementEl.textContent=j.label;
+  judgementEl.style.color=j.color;
+  lastResult=res;
+}
+
+/* ----- イベント ----- */
+calcBtn.onclick=()=>{ 
+  const I=toNum(Iinput.value);
+  const T=convertTtoDays(toNum(Tinput.value),Tunit.value);
+  const C=toNum(Cinput.value);
+  const k=toNum(kinput.value);
+  if(!k){alert('k を入力するか、自動計算を利用してください');return;}
+  updateResult(compute({I,T,C,k}));
+};
+calibrateBtn.onclick=()=>{
+  const C0=toNum(C0input.value);
+  if(!C0||C0<=0){alert('C₀に有効な金額を入力');return;}
+  const k=100/Math.sqrt(C0);
+  kinput.value=r(k,6);
+  alert('kを算出しました: '+r(k,6));
+};
+/* ▼ 新機能：月のお小遣いからk算出 */
+incomeBtn.onclick=()=>{
+  const income=toNum(incomeInput.value);
+  if(!income||income<=0){alert('お小遣いに有効な金額を入力');return;}
+  const C0=income/3;
+  const k=100/Math.sqrt(C0);
+  kinput.value=r(k,6);
+  alert(`C₀=${r(C0,2)}円として、k=${r(k,6)} を算出しました`);
+};
+
+saveBtn.onclick=()=>{
+  if(!lastResult){alert('まず計算してください');return;}
+  const memo=prompt('メモを入力（例: 欲しい物）');if(!memo) return;
+  const entry={id:'h'+Date.now(),ts:nowIso(),I:toNum(Iinput.value),T:convertTtoDays(toNum(Tinput.value),Tunit.value),C:toNum(Cinput.value),k:toNum(kinput.value),D:lastResult.D,E:lastResult.E,memo:memo.trim()};
+  let arr=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');arr.unshift(entry);localStorage.setItem(STORAGE_KEY,JSON.stringify(arr));
+  renderHistory();
+};
+exportBtn.onclick=()=>{
+  const arr=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');if(!arr.length){alert('履歴がありません');return;}
+  const rows=[['ts','I','T(日換算)','C','k','D','E','memo']];
+  arr.forEach(e=>rows.push([e.ts,e.I,e.T,e.C,e.k,e.D,e.E,e.memo]));
+  const csv=new Blob([rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')],{type:'text/csv'});
+  const url=URL.createObjectURL(csv);const a=document.createElement('a');a.href=url;a.download='desire_model_history.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+};
+clearAllBtn.onclick=()=>{
+  if(confirm('履歴を全て削除しますか？')){localStorage.removeItem(STORAGE_KEY);renderHistory();}
+};
+
+/* ----- 履歴表示 ----- */
+function renderHistory(){
+  const arr=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');historyList.innerHTML='';
+  if(!arr.length){historyList.innerHTML='<div style="color:var(--muted)">履歴はありません</div>';return;}
+  arr.forEach(item=>{
+    const el=document.createElement('div');el.className='hist-item';
+    const top=document.createElement('div');top.className='hist-top';
+    const meta=document.createElement('div');meta.className='hist-meta';meta.textContent=(new Date(item.ts)).toLocaleString();
+    const act=document.createElement('div');
+    const loadBtn=document.createElement('button');loadBtn.className='btn-ghost btn-small';loadBtn.textContent='読み込み';
+    loadBtn.onclick=()=>{Iinput.value=item.I;Tinput.value=item.T;kinput.value=item.k;Cinput.value=item.C;updateResult(compute({I:item.I,T:item.T,C:item.C,k:item.k}));window.scrollTo({top:0,behavior:'smooth'});};
+    const delBtn=document.createElement('button');delBtn.className='btn-danger btn-small';delBtn.textContent='削除';
+    delBtn.onclick=()=>{if(confirm('削除しますか？')){let arr=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');arr=arr.filter(x=>x.id!==item.id);localStorage.setItem(STORAGE_KEY,JSON.stringify(arr));renderHistory();}};
+    act.appendChild(loadBtn);act.appendChild(delBtn);
+    top.appendChild(meta);top.appendChild(act);
+    const memo=document.createElement('div');memo.className='hist-memo';memo.textContent=item.memo;
+    el.appendChild(top);el.appendChild(memo);
+    historyList.appendChild(el);
+  });
+}
+renderHistory();
+
+/* ----- PWA Service Worker登録 ----- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg=>console.log('SW登録:',reg.scope))
+      .catch(err=>console.warn('SW失敗:',err));
+  });
+}
+</script>
+</body>
+</html>
